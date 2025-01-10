@@ -20,6 +20,10 @@ ws_connections = set()
 async def index(request):
     return web.FileResponse(os.path.join(os.path.dirname(__file__), 'static/index.html'))
 
+@routes.get('/favicon.svg')
+async def favicon(request):
+    return web.FileResponse(os.path.join(os.path.dirname(__file__), 'static/favicon.svg'))
+
 @routes.get('/ws')
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
@@ -90,6 +94,7 @@ def init_app():
         web.get('/', index),
         web.get('/ws', websocket_handler),
         web.get('/stats', get_stats),
+        web.get('/favicon.svg', favicon),
         web.get('/static/{filename:.+}', static_files),
     ])
     
