@@ -1,16 +1,6 @@
 {
     "domains": [
-        "incoming.telemetry.mozilla.org",
-        "tpstelemetry.tencent.com",
-        "safebrowsing.googleapis.com",
-        "stats.uptimerobot.com",
-        "ipv6e39f859.1upsback.xyz"
     ],
     "patterns": [
-        "telemetry",
-        "analytics",
-        "stats",
-        "metric",
-        "filen"
     ]
 }
