@@ -16,10 +16,6 @@ analyzer = MosDNSLogAnalyzer()
 # 添加WebSocket连接存储
 ws_connections = set()
 
-@routes.get('/favicon.svg')
-async def favicon(request):
-    return web.FileResponse(os.path.join(os.path.dirname(__file__), 'static/favicon.svg'))
-
 @routes.get('/')
 async def index(request):
     return web.FileResponse(os.path.join(os.path.dirname(__file__), 'static/index.html'))
@@ -46,6 +42,16 @@ async def get_stats(request):
         'unique_blocked_domains': len(analyzer.blacklisted_domains)
     }
     return web.json_response(stats)
+
+@routes.get('/static/{filename:.+}')
+async def static_files(request):
+    filename = request.match_info['filename']
+    static_path = os.path.join(os.path.dirname(__file__), 'static')
+    file_path = os.path.join(static_path, filename)
+    
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return web.FileResponse(file_path)
+    return web.HTTPNotFound()
 
 async def notify_clients():
     """通知所有WebSocket客户端更新数据"""
@@ -80,12 +86,11 @@ async def cleanup_background_tasks(app):
 def init_app():
     app = web.Application()
     
-    # 修正路由注册
     app.add_routes([
         web.get('/', index),
         web.get('/ws', websocket_handler),
         web.get('/stats', get_stats),
-        web.get('/favicon.svg', favicon),  # 添加favicon.svg路由
+        web.get('/static/{filename:.+}', static_files),
     ])
     
     # CORS 中间件
