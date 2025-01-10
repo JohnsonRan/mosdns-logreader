@@ -89,6 +89,101 @@ async function fetchData() {
         const container = document.querySelector('.domain-stats-container');
         container.style.setProperty('--item-count', data.top_domains.length);
 
+        // 修改封装的动画插件，添加缓动函数
+        function createBarTextPlugin(duration = 300) {  // 改为300ms，更合适的时长
+            return {
+                id: 'customBarText',
+                afterDraw: function (chart) {
+                    const ctx = chart.ctx;
+                    const activeElements = chart.getActiveElements();
+                    const isAnyElementHovered = activeElements.length > 0;
+
+                    // 初始化动画状态
+                    if (chart.chartArea._animationState === undefined) {
+                        chart.chartArea._animationState = {
+                            opacity: 1,
+                            targetOpacity: 1,
+                            startTime: null,
+                            animating: false
+                        };
+                    }
+
+                    const state = chart.chartArea._animationState;
+
+                    // 处理动画逻辑 - 添加缓动函数
+                    const easeOutCubic = t => 1 - Math.pow(1 - t, 3);  // 添加缓动函数
+                    
+                    const animate = (timestamp) => {
+                        if (!state.startTime) state.startTime = timestamp;
+                        const progress = (timestamp - state.startTime) / duration;
+                        const easedProgress = easeOutCubic(Math.min(1, progress));
+                        
+                        if (progress < 1) {
+                            state.opacity = state.targetOpacity === 1 
+                                ? easedProgress 
+                                : 1 - easedProgress;
+                            chart.draw();
+                            state.animationFrame = requestAnimationFrame(animate);
+                        } else {
+                            state.opacity = state.targetOpacity;
+                            state.startTime = null;
+                            state.animating = false;
+                            chart.draw();
+                        }
+                    };
+
+                    // 检测状态变化并启动动画
+                    if (isAnyElementHovered && state.targetOpacity !== 0) {
+                        state.targetOpacity = 0;
+                        if (!state.animating) {
+                            state.animating = true;
+                            state.startTime = null;
+                            cancelAnimationFrame(state.animationFrame);
+                            state.animationFrame = requestAnimationFrame(animate);
+                        }
+                    } else if (!isAnyElementHovered && state.targetOpacity !== 1) {
+                        state.targetOpacity = 1;
+                        if (!state.animating) {
+                            state.animating = true;
+                            state.startTime = null;
+                            cancelAnimationFrame(state.animationFrame);
+                            state.animationFrame = requestAnimationFrame(animate);
+                        }
+                    }
+
+                    // 绘制数字
+                    chart.data.datasets.forEach((dataset, i) => {
+                        const meta = chart.getDatasetMeta(i);
+                        meta.data.forEach((bar, index) => {
+                            const value = dataset.data[index];
+                            if (value > 0) {
+                                const position = bar.tooltipPosition();
+                                const barWidth = bar.width;
+                                ctx.save();
+                                ctx.fillStyle = '#FFFFFF';
+                                ctx.font = '500 11px MiSans-VF';
+                                ctx.textAlign = 'left';
+                                ctx.textBaseline = 'middle';
+                                ctx.globalAlpha = state.opacity;
+
+                                const text = value.toString();
+                                const textWidth = ctx.measureText(text).width;
+                                const minWidthForText = textWidth + 10;
+
+                                if (barWidth > minWidthForText) {
+                                    const padding = 5;
+                                    const x = position.x - textWidth - padding;
+                                    const y = position.y;
+                                    ctx.fillText(text, x, y);
+                                }
+                                ctx.restore();
+                            }
+                        });
+                    });
+                }
+            };
+        }
+
         window.domainChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -187,7 +282,27 @@ async function fetchData() {
                                     ''
                                 ];
 
-                                // ...existing tooltip code...
+                                // 添加查询类型信息
+                                if (domainData.details.types) {
+                                    lines.push('查询类型:');
+                                    Object.entries(domainData.details.types)
+                                        .sort((a, b) => b[1] - a[1])
+                                        .forEach(([type, count]) => {
+                                            lines.push(`  ${type}: ${count}次`);
+                                        });
+                                    lines.push('');
+                                }
+
+                                // 添加来源IP信息
+                                if (domainData.details.ips) {
+                                    lines.push('来源IP:');
+                                    Object.entries(domainData.details.ips)
+                                        .sort((a, b) => b[1] - a[1])
+                                        .slice(0, 5) // 只显示前5个IP
+                                        .forEach(([ip, count]) => {
+                                            lines.push(`  ${ip}: ${count}次`);
+                                        });
+                                }
 
                                 return lines;
                             },
@@ -243,50 +358,7 @@ async function fetchData() {
                     }
                 }
             },
-            plugins: [{
-                id: 'customBarText',
-                afterDraw: function (chart) {
-                    const ctx = chart.ctx;
-                    const activeElements = chart.getActiveElements();
-
-                    chart.data.datasets.forEach((dataset, i) => {
-                        const meta = chart.getDatasetMeta(i);
-                        meta.data.forEach((bar, index) => {
-                            const value = dataset.data[index];
-                            if (value > 0) {
-                                const position = bar.tooltipPosition();
-                                const barWidth = bar.width;
-
-                                // 检查当前条形图是否被hover
-                                const isBarHovered = activeElements.some(element =>
-                                    element.datasetIndex === i && element.index === index
-                                );
-
-                                // 如果当前条不是被hover的，就显示数字
-                                if (!isBarHovered) {
-                                    ctx.save();
-                                    ctx.fillStyle = '#FFFFFF';
-                                    ctx.font = '500 11px MiSans-VF';
-                                    ctx.textAlign = 'left';
-                                    ctx.textBaseline = 'middle';
-
-                                    const text = value.toString();
-                                    const textWidth = ctx.measureText(text).width;
-                                    const minWidthForText = textWidth + 10;
-
-                                    if (barWidth > minWidthForText) {
-                                        const padding = 5;
-                                        const x = position.x - textWidth - padding;
-                                        const y = position.y;
-                                        ctx.fillText(text, x, y);
-                                    }
-                                    ctx.restore();
-                                }
-                            }
-                        });
-                    });
-                }
-            }]
+            plugins: [createBarTextPlugin(623)] // 使用300ms的动画时长
         });
 
         // 修改查询类型统计图表初始化
@@ -301,6 +373,7 @@ async function fetchData() {
         const typeContainer = typeCtx.canvas.closest('.domain-stats-container');
         typeContainer.style.setProperty('--item-count', data.query_types.length);
 
+        // 修改查询类型统计图表配置部分
         window.queryTypeChart = new Chart(typeCtx, {
             type: 'bar',
             data: {
@@ -353,50 +426,7 @@ async function fetchData() {
                     }
                 }
             },
-            plugins: [{
-                id: 'customBarText',
-                afterDraw: function (chart) {
-                    const ctx = chart.ctx;
-                    const activeElements = chart.getActiveElements();
-
-                    chart.data.datasets.forEach((dataset, i) => {
-                        const meta = chart.getDatasetMeta(i);
-                        meta.data.forEach((bar, index) => {
-                            const value = dataset.data[index];
-                            if (value > 0) {
-                                const position = bar.tooltipPosition();
-                                const barWidth = bar.width;
-
-                                // 检查当前条形图是否被hover
-                                const isBarHovered = activeElements.some(element =>
-                                    element.datasetIndex === i && element.index === index
-                                );
-
-                                // 如果当前条不是被hover的，就显示数字
-                                if (!isBarHovered) {
-                                    ctx.save();
-                                    ctx.fillStyle = '#FFFFFF';
-                                    ctx.font = '500 11px MiSans-VF';
-                                    ctx.textAlign = 'left';
-                                    ctx.textBaseline = 'middle';
-
-                                    const text = value.toString();
-                                    const textWidth = ctx.measureText(text).width;
-                                    const minWidthForText = textWidth + 10;
-
-                                    if (barWidth > minWidthForText) {
-                                        const padding = 5;
-                                        const x = position.x - textWidth - padding;
-                                        const y = position.y;
-                                        ctx.fillText(text, x, y);
-                                    }
-                                    ctx.restore();
-                                }
-                            }
-                        });
-                    });
-                }
-            }]
+            plugins: [createBarTextPlugin(300)] // 确保使用相同的动画时长
         });
 
         // 更新客户端统计

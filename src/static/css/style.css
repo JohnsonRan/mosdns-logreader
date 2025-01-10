@@ -291,3 +291,13 @@ body {
         min-height: 400px;
     }
 }
+
+/* 图表数字标签动画 */
+.chart-number {
+    opacity: 1;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.chart-number.fade-out {
+    opacity: 0;
+}
