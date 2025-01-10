@@ -477,19 +477,41 @@
                     data: {
                         labels: data.top_domains.map(domain => domain.domain),
                         datasets: [{
-                            label: '总请求数',
-                            data: data.top_domains.map(domain => domain.requests),
-                            backgroundColor: 'rgba(67, 97, 238, 0.8)',  // primary-color
-                            borderColor: 'rgba(67, 97, 238, 1)',
-                            borderWidth: 1,
-                            borderRadius: 5
+                            label: '未命中',
+                            data: data.top_domains.map(domain => domain.requests - domain.cache_hits),
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) {
+                                    return 'rgba(37, 99, 235, 0.9)';
+                                }
+                                let gradientFill = ctx.createLinearGradient(0, 0, chartArea.width, 0);
+                                gradientFill.addColorStop(0, 'rgba(37, 99, 235, 0.9)');
+                                gradientFill.addColorStop(1, 'rgba(59, 130, 246, 0.9)');
+                                return gradientFill;
+                            },
+                            borderWidth: 0,
+                            borderRadius: 5,
+                            barPercentage: 0.95,
+                            categoryPercentage: 0.9
                         }, {
                             label: '缓存命中',
                             data: data.top_domains.map(domain => domain.cache_hits),
-                            backgroundColor: 'rgba(46, 196, 182, 0.8)',  // success-color
-                            borderColor: 'rgba(46, 196, 182, 1)',
-                            borderWidth: 1,
-                            borderRadius: 5
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) {
+                                    return 'rgba(46, 196, 182, 0.8)';
+                                }
+                                let gradientFill = ctx.createLinearGradient(0, 0, chartArea.width, 0);
+                                gradientFill.addColorStop(0, 'rgba(46, 196, 182, 0.9)');
+                                gradientFill.addColorStop(1, 'rgba(33, 158, 188, 0.9)');
+                                return gradientFill;
+                            },
+                            borderWidth: 0,
+                            borderRadius: 5,
+                            barPercentage: 0.95,
+                            categoryPercentage: 0.9
                         }]
                     },
                     options: {
@@ -497,7 +519,8 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         animation: {
-                            duration: 200  // 减少动画时间
+                            duration: 300,
+                            easing: 'easeOutQuart'
                         },
                         plugins: {
                             legend: {
@@ -506,11 +529,63 @@
                                 labels: {
                                     boxWidth: 12,
                                     usePointStyle: true,
-                                    padding: 15
+                                    padding: 15,
+                                    font: {
+                                        size: 12
+                                    }
                                 }
                             },
                             tooltip: {
-                                enabled: false  // 禁用悬浮提示
+                                enabled: true,
+                                mode: 'nearest',
+                                intersect: true,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                bodySpacing: 4,
+                                position: 'nearest',  // 改为nearest
+                                events: ['mousemove'],
+                                callbacks: {
+                                    title: function(tooltipItems) {
+                                        const item = tooltipItems[0];
+                                        // 未命中时只显示域名
+                                        if (item.datasetIndex === 0) {
+                                            return item.label;
+                                        }
+                                        return item.label;
+                                    },
+                                    label: function(tooltipItem) {
+                                        const value = tooltipItem.raw;
+                                        if (tooltipItem.datasetIndex === 0) {
+                                            return [`未命中: ${value}次`];
+                                        }
+                                        
+                                        const domain = tooltipItem.label;
+                                        const domainData = data.top_domains.find(d => d.domain === domain);
+                                        if (!domainData || !domainData.details) return '';
+                                        
+                                        let lines = [
+                                            `总请求数: ${domainData.requests}`,
+                                            `缓存命中: ${domainData.cache_hits}`,
+                                            `命中率: ${((domainData.cache_hits / domainData.requests) * 100).toFixed(1)}%`,
+                                            ''
+                                        ];
+                                        
+                                        // ...existing tooltip code...
+                                        
+                                        return lines;
+                                    },
+                                    labelColor: function(tooltipItem) {
+                                        // 返回对应数据集的颜色
+                                        const dataset = tooltipItem.dataset;
+                                        const color = tooltipItem.datasetIndex === 0 ? 
+                                            'rgba(37, 99, 235, 0.9)' : 
+                                            'rgba(46, 196, 182, 0.9)';
+                                        return {
+                                            borderColor: color,
+                                            backgroundColor: color
+                                        };
+                                    }
+                                }
                             },
                             datalabels: {  // 添加数值标签
                                 color: '#2c3e50',
@@ -527,6 +602,7 @@
                         },
                         scales: {
                             x: {
+                                stacked: true,  // 启用堆叠
                                 grid: {
                                     display: false
                                 },
@@ -535,6 +611,7 @@
                                 }
                             },
                             y: {
+                                stacked: true,  // 启用堆叠
                                 grid: {
                                     borderDash: [2, 4]
                                 },
@@ -550,26 +627,44 @@
                         }
                     },
                     plugins: [{
+                        id: 'customBarText',
                         afterDraw: function(chart) {
                             const ctx = chart.ctx;
+                            const activeElements = chart.getActiveElements();
+                            
                             chart.data.datasets.forEach((dataset, i) => {
                                 const meta = chart.getDatasetMeta(i);
                                 meta.data.forEach((bar, index) => {
                                     const value = dataset.data[index];
-                                    if (value > 0) {  // 只显示非零值
+                                    if (value > 0) {
                                         const position = bar.tooltipPosition();
+                                        const barWidth = bar.width;
                                         
-                                        // 使用更浅的颜色
-                                        ctx.fillStyle = 'rgba(44, 62, 80, 0.65)';  // 降低不透明度
-                                        ctx.font = '500 11px MiSans-VF';  // 减小字重
-                                        ctx.textAlign = 'left';
-                                        ctx.textBaseline = 'middle';
+                                        // 检查当前条形图是否被hover
+                                        const isBarHovered = activeElements.some(element => 
+                                            element.datasetIndex === i && element.index === index
+                                        );
                                         
-                                        const padding = 5;
-                                        const x = position.x + padding;
-                                        const y = position.y;
-                                        
-                                        ctx.fillText(value, x, y);
+                                        // 如果当前条不是被hover的，就显示数字
+                                        if (!isBarHovered) {
+                                            ctx.save();
+                                            ctx.fillStyle = '#FFFFFF';
+                                            ctx.font = '500 11px MiSans-VF';
+                                            ctx.textAlign = 'left';
+                                            ctx.textBaseline = 'middle';
+                                            
+                                            const text = value.toString();
+                                            const textWidth = ctx.measureText(text).width;
+                                            const minWidthForText = textWidth + 10;
+                                            
+                                            if (barWidth > minWidthForText) {
+                                                const padding = 5;
+                                                const x = position.x - textWidth - padding;
+                                                const y = position.y;
+                                                ctx.fillText(text, x, y);
+                                            }
+                                            ctx.restore();
+                                        }
                                     }
                                 });
                             });
@@ -614,7 +709,12 @@
                                 display: false
                             },
                             tooltip: {
-                                enabled: false
+                                enabled: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        return `请求数: ${context.raw}`;
+                                    }
+                                }
                             }
                         },
                         scales: {
@@ -637,25 +737,44 @@
                         }
                     },
                     plugins: [{
+                        id: 'customBarText',
                         afterDraw: function(chart) {
                             const ctx = chart.ctx;
+                            const activeElements = chart.getActiveElements();
+                            
                             chart.data.datasets.forEach((dataset, i) => {
                                 const meta = chart.getDatasetMeta(i);
                                 meta.data.forEach((bar, index) => {
                                     const value = dataset.data[index];
                                     if (value > 0) {
                                         const position = bar.tooltipPosition();
+                                        const barWidth = bar.width;
                                         
-                                        ctx.fillStyle = 'rgba(44, 62, 80, 0.65)';
-                                        ctx.font = '500 11px MiSans-VF';
-                                        ctx.textAlign = 'left';
-                                        ctx.textBaseline = 'middle';
+                                        // 检查当前条形图是否被hover
+                                        const isBarHovered = activeElements.some(element => 
+                                            element.datasetIndex === i && element.index === index
+                                        );
                                         
-                                        const padding = 5;
-                                        const x = position.x + padding;
-                                        const y = position.y;
-                                        
-                                        ctx.fillText(value, x, y);
+                                        // 如果当前条不是被hover的，就显示数字
+                                        if (!isBarHovered) {
+                                            ctx.save();
+                                            ctx.fillStyle = '#FFFFFF';
+                                            ctx.font = '500 11px MiSans-VF';
+                                            ctx.textAlign = 'left';
+                                            ctx.textBaseline = 'middle';
+                                            
+                                            const text = value.toString();
+                                            const textWidth = ctx.measureText(text).width;
+                                            const minWidthForText = textWidth + 10;
+                                            
+                                            if (barWidth > minWidthForText) {
+                                                const padding = 5;
+                                                const x = position.x - textWidth - padding;
+                                                const y = position.y;
+                                                ctx.fillText(text, x, y);
+                                            }
+                                            ctx.restore();
+                                        }
                                     }
                                 });
                             });

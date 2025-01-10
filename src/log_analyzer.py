@@ -45,7 +45,14 @@ class MosDNSLogAnalyzer:
     def __init__(self):
         self.total_requests = 0
         self.cache_hits = 0
-        self.domain_stats = defaultdict(lambda: {"requests": 0, "cache_hits": 0})
+        self.domain_stats = defaultdict(lambda: {
+            "requests": 0, 
+            "cache_hits": 0,
+            "details": {
+                "ips": defaultdict(int),
+                "types": defaultdict(int)
+            }
+        })
         self.client_stats = Counter()
         self.ip_location_cache = {}
         self.ip_cache_file = "ip_cache.json"
@@ -240,6 +247,8 @@ class MosDNSLogAnalyzer:
             if self.entry_returned_pattern.search(line) and current_domain and current_client:
                 self.total_requests += 1
                 self.domain_stats[current_domain]["requests"] += 1
+                self.domain_stats[current_domain]["details"]["ips"][current_client] += 1
+                self.domain_stats[current_domain]["details"]["types"][current_type] += 1
                 self.client_stats[current_client] += 1
                 self.query_types[current_type] += 1  # 统计查询类型
                 
@@ -265,11 +274,7 @@ class MosDNSLogAnalyzer:
 
         # 计算耗时(毫秒)
         processing_duration = int(self.processing_end_ms - self.processing_start_ms)
-        duration_str = (
-            f"{processing_duration}毫秒" if processing_duration < 1000 
-            else f"{processing_duration//1000}秒 {processing_duration%1000}毫秒"
-        )
-
+        duration_str = f"{processing_duration}毫秒"
         # 获取基础统计信息
         stats = {
             "total_requests": self.total_requests,
@@ -299,7 +304,11 @@ class MosDNSLogAnalyzer:
                 "domain": domain,
                 "requests": requests,
                 "cache_hits": hits,
-                "hit_rate": round((hits/requests * 100), 2) if requests > 0 else 0
+                "hit_rate": round((hits/requests * 100), 2) if requests > 0 else 0,
+                "details": {
+                    "ips": dict(self.domain_stats[domain]["details"]["ips"]),
+                    "types": dict(self.domain_stats[domain]["details"]["types"])
+                }
             }
             for domain, requests, hits in top_domains
         ]
