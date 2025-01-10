@@ -41,7 +41,7 @@ pip install -r requirements.txt
 python src/server.py
 ```
 
-应用将在 http://localhost:8000 启动
+应用将在 http://127.0.0.1:8000 启动
 
 ## 配置说明
 
