@@ -24,8 +24,8 @@
 
 1. 克隆仓库：
 ```bash
-git clone https://github.com/yourusername/mosnds-logreader.git
-cd mosnds-logreader
+git clone https://github.com/JohnsonRan/mosdns-logreader
+cd mosdns-logreader
 ```
 
 2. 安装依赖：
